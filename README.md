@@ -1,1 +1,1 @@
-# DOG-streamlit
+# DOGstreamlit
