@@ -8,7 +8,7 @@ from ultralytics import YOLO
 from fpdf import FPDF
 from datetime import datetime
 
-# Optional webcam support
+# Optional Webcam Support
 try:
     from streamlit_webrtc import webrtc_streamer
     WEBRTC_AVAILABLE = True
@@ -70,7 +70,7 @@ st.markdown("""
 
 
 # ---------------------------------------------------
-# PDF REPORT
+# PDF REPORT CLASS
 # ---------------------------------------------------
 
 class PDF(FPDF):
@@ -86,12 +86,13 @@ class PDF(FPDF):
 
 
 # ---------------------------------------------------
-# SUGGESTION SYSTEM
+# SUGGESTIONS & TREATMENT
 # ---------------------------------------------------
 
 def get_suggestion_and_cure(label):
 
     data = {
+
         "disease": (
             "Apply fungicide spray",
             "Use Carbendazim or Mancozeb weekly"
@@ -104,12 +105,12 @@ def get_suggestion_and_cure(label):
 
         "dry": (
             "Increase watering frequency",
-            "Install proper drip irrigation system"
+            "Install drip irrigation system"
         ),
 
         "healthy": (
-            "No action required",
-            "Maintain current plant care routine"
+            "No action needed",
+            "Maintain current care routine"
         )
     }
 
@@ -117,7 +118,7 @@ def get_suggestion_and_cure(label):
         label.lower(),
         (
             "Monitor plant regularly",
-            "Use general organic plant care"
+            "General organic care recommended"
         )
     )
 
@@ -143,19 +144,19 @@ def generate_pdf(original, detected, detections, filename):
     pdf.set_y(120)
 
     pdf.set_font("Arial", "B", 12)
-    pdf.cell(0, 10, f"File: {filename}", 0, 1)
+    pdf.cell(0, 10, f"File Name: {filename}", 0, 1)
 
-    pdf.cell(0, 10, "Detection Results:", 0, 1)
+    pdf.cell(0, 10, "Detection Analysis:", 0, 1)
 
     pdf.set_font("Arial", "", 11)
 
-    for label, conf in detections:
+    for label, confidence in detections:
 
         suggestion, cure = get_suggestion_and_cure(label)
 
-        pdf.cell(0, 8, f"{label} ({conf:.2f})", 0, 1)
+        pdf.cell(0, 8, f"{label} ({confidence:.2f})", 0, 1)
         pdf.cell(0, 8, f"Suggestion: {suggestion}", 0, 1)
-        pdf.cell(0, 8, f"Cure: {cure}", 0, 1)
+        pdf.cell(0, 8, f"Treatment: {cure}", 0, 1)
 
         pdf.ln(2)
 
@@ -169,8 +170,8 @@ def generate_pdf(original, detected, detections, filename):
     pdf.multi_cell(
         0,
         8,
-        "Monitor crops regularly and apply treatment early. "
-        "Maintain proper irrigation, sunlight, and nutrition."
+        "Ensure regular crop monitoring and apply treatments early. "
+        "Maintain proper sunlight, watering, and nutrients."
     )
 
     pdf.ln(5)
@@ -179,18 +180,15 @@ def generate_pdf(original, detected, detections, filename):
     pdf.cell(0, 10, "Developed By:", 0, 1)
 
     pdf.set_font("Arial", "", 11)
-
-    pdf.cell(0, 8, "Utkarsh Tripathi", 0, 1)
     pdf.cell(0, 8, "Aditya Kumar Raj", 0, 1)
-    pdf.cell(0, 8, "Abhiyanshu Kumar", 0, 1)
 
-    pdf.cell(0, 8, f"Generated: {datetime.now()}", 0, 1)
+    pdf.cell(0, 8, f"Generated On: {datetime.now()}", 0, 1)
 
     return pdf.output(dest="S").encode("latin-1")
 
 
 # ---------------------------------------------------
-# LOAD MODEL
+# LOAD YOLO MODEL
 # ---------------------------------------------------
 
 @st.cache_resource
@@ -213,9 +211,9 @@ def detect_objects(frame, model, confidence):
     output = frame.copy()
     detections = []
 
-    for r in results:
+    for result in results:
 
-        for box in r.boxes:
+        for box in result.boxes:
 
             conf = float(box.conf[0])
 
@@ -250,7 +248,7 @@ def detect_objects(frame, model, confidence):
 
 
 # ---------------------------------------------------
-# MAIN APP
+# MAIN APPLICATION
 # ---------------------------------------------------
 
 def main():
@@ -262,7 +260,7 @@ def main():
 
     st.markdown(
         "<p style='text-align:center;color:white;'>"
-        "Utkarsh Tripathi | Aditya Kumar Raj | Abhiyanshu Kumar"
+        "Developed by Aditya Kumar Raj"
         "</p>",
         unsafe_allow_html=True
     )
@@ -273,6 +271,7 @@ def main():
         st.error("DOG.pt model file not found.")
         return
 
+    # Sidebar
     st.sidebar.title("⚙ Settings")
 
     confidence = st.sidebar.slider(
@@ -283,14 +282,14 @@ def main():
     )
 
     mode = st.sidebar.selectbox(
-        "Select Mode",
+        "Select Detection Mode",
         ["Image Detection", "Live Detection"]
     )
 
     st.markdown('<div class="glass-box">', unsafe_allow_html=True)
 
     # ---------------------------------------------------
-    # IMAGE MODE
+    # IMAGE DETECTION
     # ---------------------------------------------------
 
     if mode == "Image Detection":
@@ -324,28 +323,29 @@ def main():
 
             st.divider()
 
-            metric1, metric2, metric3 = st.columns(3)
+            m1, m2, m3 = st.columns(3)
 
-            metric1.metric("Objects Found", len(detections))
+            m1.metric("Objects Found", len(detections))
 
             avg_conf = (
                 np.mean([c for _, c in detections])
                 if detections else 0
             )
 
-            metric2.metric(
+            m2.metric(
                 "Average Confidence",
                 f"{avg_conf:.2f}"
             )
 
-            metric3.metric(
+            m3.metric(
                 "Status",
                 "Healthy" if len(detections) == 0 else "Issue Found"
             )
 
+            # Suggestions
             if detections:
 
-                st.subheader("🌱 Suggestions & Treatment")
+                st.subheader("🌱 Suggestions & Treatments")
 
                 for label, conf in detections:
 
@@ -358,6 +358,7 @@ def main():
 
                     st.divider()
 
+                # Generate PDF
                 pdf_data = generate_pdf(
                     image,
                     detected_image,
@@ -366,21 +367,21 @@ def main():
                 )
 
                 st.download_button(
-                    "📄 Download Report",
+                    "📄 Download PDF Report",
                     pdf_data,
                     file_name="DOG_Report.pdf",
                     mime="application/pdf"
                 )
 
     # ---------------------------------------------------
-    # LIVE MODE
+    # LIVE DETECTION
     # ---------------------------------------------------
 
     elif mode == "Live Detection":
 
         if WEBRTC_AVAILABLE:
 
-            st.success("Webcam initialized successfully.")
+            st.success("Live webcam detection started.")
 
             webrtc_streamer(
                 key="live-detection"
@@ -394,6 +395,14 @@ def main():
             )
 
     st.markdown("</div>", unsafe_allow_html=True)
+
+    # Footer
+    st.markdown(
+        "<hr><p style='text-align:center;color:gray;'>"
+        "Developed by Aditya Kumar Raj"
+        "</p>",
+        unsafe_allow_html=True
+    )
 
 
 # ---------------------------------------------------
