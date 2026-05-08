@@ -180,9 +180,9 @@ def generate_pdf(original, detected, detections, filename):
 
     pdf.set_font("Arial", "", 11)
 
-    pdf.cell(0, 8, "Utkarsh Tripathi", 0, 1)
+    
     pdf.cell(0, 8, "Aditya Kumar Raj", 0, 1)
-    pdf.cell(0, 8, "Abhiyanshu Kumar", 0, 1)
+    
 
     pdf.cell(0, 8, f"Generated: {datetime.now()}", 0, 1)
 
@@ -262,7 +262,7 @@ def main():
 
     st.markdown(
         "<p style='text-align:center;color:white;'>"
-        "Utkarsh Tripathi | Aditya Kumar Raj | Abhiyanshu Kumar"
+         Aditya Kumar Raj 
         "</p>",
         unsafe_allow_html=True
     )
