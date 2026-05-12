@@ -1,417 +1,188 @@
 import streamlit as st
+from ultralytics import YOLO
 import cv2
 import numpy as np
+import tempfile
 import os
-from ultralytics import YOLO
+from streamlit_webrtc import webrtc_streamer
+from fpdf import FPDF
+from datetime import datetime
 
-# ---------------------------------------------------
-# PAGE CONFIG
-# ---------------------------------------------------
-
-st.set_page_config(
-    page_title="Plant Disease Detection",
-    page_icon="🌿",
-    layout="wide"
-)
-
-# ---------------------------------------------------
-# MODEL PATH
-# ---------------------------------------------------
+# ---------------- PAGE CONFIG ----------------
+st.set_page_config(page_title="D.O.G Vision System", page_icon="🌿", layout="wide")
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 MODEL_PATH = os.path.join(BASE_DIR, "DOG.pt")
 
-# ---------------------------------------------------
-# CUSTOM CSS
-# ---------------------------------------------------
-
+# ---------------- UI STYLE ----------------
 st.markdown("""
 <style>
-
-/* Background */
-
 .stApp {
-
-    background:
-    linear-gradient(
-        rgba(0,0,0,0.65),
-        rgba(0,40,0,0.75)
-    ),
-    url("https://images.unsplash.com/photo-1466692476868-aef1dfb1e735");
-
+    background: linear-gradient(rgba(0,0,0,0.7), rgba(0,0,0,0.9)),
+    url("https://images.unsplash.com/photo-1501004318641-b39e6451bec6");
     background-size: cover;
-    background-position: center;
-    background-repeat: no-repeat;
-    background-attachment: fixed;
 }
-
-
-/* Main Container */
-
-.main .block-container {
-
-    padding-top: 2rem;
-    padding-bottom: 2rem;
-    padding-left: 3rem;
-    padding-right: 3rem;
-}
-
-
-/* Hide Streamlit Branding */
-
-#MainMenu {
-    visibility: hidden;
-}
-
-footer {
-    visibility: hidden;
-}
-
-
-/* Title */
-
 .main-title {
-
-    text-align: center;
-
-    font-size: 4rem;
-
-    font-weight: bold;
-
-    color: #00ff99;
-
-    text-shadow:
-        0 0 10px #00ff99,
-        0 0 20px #00ff99;
-
-    margin-bottom: 10px;
+    text-align:center;
+    font-size:4rem;
+    font-weight:bold;
+    background: linear-gradient(90deg,#00e676,#00c853,#69f0ae);
+    -webkit-background-clip: text;
+    color: transparent;
 }
-
-
-/* Subtitle */
-
-.subtitle {
-
-    text-align: center;
-
-    color: white;
-
-    font-size: 1.2rem;
-
-    margin-bottom: 30px;
-}
-
-
-/* Glass Box */
-
-.glass-box {
-
-    background: rgba(255,255,255,0.08);
-
-    border-radius: 20px;
-
-    padding: 25px;
-
-    backdrop-filter: blur(10px);
-
-    border: 1px solid rgba(255,255,255,0.15);
-
-    box-shadow:
-        0 4px 20px rgba(0,255,100,0.2);
-}
-
-
-/* Sidebar */
-
-section[data-testid="stSidebar"] {
-
-    background:
-    linear-gradient(
-        rgba(0,40,0,0.95),
-        rgba(0,0,0,0.95)
-    );
-}
-
-
-/* Sidebar Text */
-
-section[data-testid="stSidebar"] * {
-
-    color: white !important;
-}
-
-
-/* Upload Box */
-
-[data-testid="stFileUploader"] {
-
+.glass {
     background: rgba(255,255,255,0.05);
-
-    border: 2px dashed #00ff99;
-
-    border-radius: 15px;
-
-    padding: 20px;
+    border-radius:20px;
+    backdrop-filter: blur(20px);
+    padding:25px;
+    margin-top:20px;
 }
-
-
-/* Buttons */
-
-.stButton > button {
-
-    width: 100%;
-
-    border-radius: 12px;
-
-    border: none;
-
-    padding: 12px;
-
-    background: linear-gradient(
-        90deg,
-        #00c853,
-        #00ff99
-    );
-
-    color: white;
-
-    font-weight: bold;
-}
-
-
-/* Metric Cards */
-
-[data-testid="metric-container"] {
-
-    background: rgba(255,255,255,0.07);
-
-    border-radius: 15px;
-
-    padding: 15px;
-
-    border: 1px solid rgba(255,255,255,0.1);
-}
-
-
-/* Text */
-
-h1, h2, h3, h4, h5 {
-
-    color: white !important;
-}
-
-p, label, div, span {
-
-    color: white;
-}
-
-
-/* Images */
-
-img {
-
-    border-radius: 15px;
-}
-
-
-/* Footer */
-
-.footer {
-
-    text-align: center;
-
-    color: #cccccc;
-
-    margin-top: 30px;
-
-    font-size: 14px;
-}
-
 </style>
 """, unsafe_allow_html=True)
 
-# ---------------------------------------------------
-# TITLE
-# ---------------------------------------------------
+# ---------------- PDF ----------------
+class PDF(FPDF):
+    def header(self):
+        self.set_font('Arial', 'B', 14)
+        self.cell(0, 10, 'D.O.G Vision System Report', 0, 1, 'C')
 
-st.markdown(
-    """
-    <div class="main-title">
-        🌿 Plant Disease Detection System
-    </div>
-    """,
-    unsafe_allow_html=True
-)
+    def footer(self):
+        self.set_y(-15)
+        self.set_font('Arial', 'I', 8)
+        self.cell(0, 10, f'Page {self.page_no()}', 0, 0, 'C')
 
-st.markdown(
-    """
-    <div class="subtitle">
-        AI Powered Smart Crop Monitoring
-    </div>
-    """,
-    unsafe_allow_html=True
-)
+# --- Suggestions + Cure Logic ---
+def get_suggestion_and_cure(label):
+    data = {
+        "disease": ("Apply fungicide spray", "Use Carbendazim or Mancozeb weekly"),
+        "pest": ("Spray pesticide", "Use Imidacloprid or Neem oil treatment"),
+        "dry": ("Increase watering frequency", "Install drip irrigation system"),
+        "healthy": ("No action needed", "Maintain current care routine")
+    }
+    return data.get(label.lower(), ("Monitor plant regularly", "General organic care recommended"))
 
-# ---------------------------------------------------
-# LOAD MODEL
-# ---------------------------------------------------
 
+def generate_pdf(original, annotated, detections, filename):
+    pdf = PDF()
+    pdf.add_page()
+
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as f1, \
+         tempfile.NamedTemporaryFile(delete=False, suffix=".png") as f2:
+        cv2.imwrite(f1.name, original)
+        cv2.imwrite(f2.name, annotated)
+        pdf.image(f1.name, x=10, y=30, w=90)
+        pdf.image(f2.name, x=110, y=30, w=90)
+
+    pdf.set_y(110)
+    pdf.set_font('Arial', 'B', 12)
+    pdf.cell(0, 10, f'File: {filename}', 0, 1)
+
+    pdf.set_font('Arial', 'B', 12)
+    pdf.cell(0, 10, 'Detection Analysis:', 0, 1)
+
+    pdf.set_font('Arial', '', 11)
+    for d, c in detections:
+        suggestion, cure = get_suggestion_and_cure(d)
+        pdf.cell(0, 8, f'{d} ({c:.2f})', 0, 1)
+        pdf.cell(0, 8, f'Suggestion: {suggestion}', 0, 1)
+        pdf.cell(0, 8, f'Cure/Treatment: {cure}', 0, 1)
+        pdf.ln(2)
+
+    pdf.ln(5)
+    pdf.set_font('Arial', 'B', 12)
+    pdf.cell(0, 10, 'Final Recommendation:', 0, 1)
+    pdf.set_font('Arial', '', 11)
+    pdf.multi_cell(0, 8, 'Ensure regular monitoring of crops. Apply suggested treatments promptly to avoid spread of disease. Maintain proper irrigation, sunlight, and nutrient balance for optimal growth.')
+
+    pdf.ln(5)
+    pdf.set_font('Arial', 'B', 12)
+    pdf.cell(0, 10, 'Developed By:', 0, 1)
+    pdf.set_font('Arial', '', 11)
+    pdf.cell(0, 8, 'Utkarsh Tripathi', 0, 1)
+    pdf.cell(0, 8, 'Aditya Kumar Raj', 0, 1)
+    pdf.cell(0, 8, 'Abhiyanshu Kumar', 0, 1)
+
+    pdf.cell(0, 8, f'Date: {datetime.now()}', 0, 1)
+
+    return pdf.output(dest='S').encode('latin-1')
+
+# ---------------- MODEL ----------------
 @st.cache_resource
 def load_model():
-
     if not os.path.exists(MODEL_PATH):
         return None
-
     return YOLO(MODEL_PATH)
 
-model = load_model()
 
-# ---------------------------------------------------
-# ERROR IF MODEL NOT FOUND
-# ---------------------------------------------------
+def detect(frame, model, conf):
+    res = model(frame)
+    out = frame.copy()
+    dets = []
 
-if model is None:
-
-    st.error("DOG.pt model file not found.")
-    st.stop()
-
-# ---------------------------------------------------
-# SIDEBAR
-# ---------------------------------------------------
-
-st.sidebar.title("⚙ Detection Settings")
-
-confidence = st.sidebar.slider(
-    "Confidence Threshold",
-    0.0,
-    1.0,
-    0.5
-)
-
-# ---------------------------------------------------
-# MAIN CONTENT
-# ---------------------------------------------------
-
-st.markdown('<div class="glass-box">', unsafe_allow_html=True)
-
-uploaded_file = st.file_uploader(
-    "📤 Upload Plant Image",
-    type=["jpg", "jpeg", "png"]
-)
-
-if uploaded_file:
-
-    # Read Image
-    file_bytes = np.asarray(
-        bytearray(uploaded_file.read()),
-        dtype=np.uint8
-    )
-
-    image = cv2.imdecode(file_bytes, 1)
-
-    # Detect Objects
-    results = model(image)
-
-    output = image.copy()
-
-    detections = []
-
-    for result in results:
-
-        for box in result.boxes:
-
-            conf = float(box.conf[0])
-
-            if conf >= confidence:
-
+    for r in res:
+        for box in r.boxes:
+            c = float(box.conf[0])
+            if c > conf:
                 cls = int(box.cls[0])
-
-                label = model.names[cls]
-
-                detections.append((label, conf))
-
+                name = model.names[cls]
+                dets.append((name, c))
                 x1, y1, x2, y2 = map(int, box.xyxy[0])
+                cv2.rectangle(out, (x1, y1), (x2, y2), (0,255,0), 2)
+                cv2.putText(out, f"{name} {c:.2f}", (x1, y1-5), 0, 0.6, (0,255,0), 2)
 
-                # Draw Box
-                cv2.rectangle(
-                    output,
-                    (x1, y1),
-                    (x2, y2),
-                    (0,255,0),
-                    2
-                )
+    return out, dets
 
-                # Label
-                cv2.putText(
-                    output,
-                    f"{label} {conf:.2f}",
-                    (x1, y1 - 10),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.7,
-                    (0,255,0),
-                    2
-                )
+# ---------------- MAIN ----------------
+def main():
+    st.markdown('<div class="main-title">D.O.G Vision System</div>', unsafe_allow_html=True)
+    st.markdown('<p style="text-align:center;color:white;">Utkarsh Tripathi | Aditya Kumar Raj | Abhiyanshu Kumar</p>', unsafe_allow_html=True)
 
-    # Show Images
-    col1, col2 = st.columns(2)
+    model = load_model()
+    if model is None:
+        st.error("Model not found")
+        return
 
-    with col1:
-        st.image(image, caption="Original Image")
+    st.sidebar.title("Settings")
+    conf = st.sidebar.slider("Confidence", 0.0, 1.0, 0.5)
+    mode = st.sidebar.selectbox("Mode", ["Image", "Live"])
 
-    with col2:
-        st.image(output, caption="Detected Disease")
+    st.markdown('<div class="glass">', unsafe_allow_html=True)
 
-    st.divider()
+    if mode == "Image":
+        st.markdown("### 📤 Upload Image for AI Analysis")
+        file = st.file_uploader("", type=["jpg","png","jpeg"])
 
-    # Metrics
-    m1, m2, m3 = st.columns(3)
+        if file:
+            img = cv2.imdecode(np.frombuffer(file.read(), np.uint8), 1)
+            out, det = detect(img, model, conf)
 
-    m1.metric("Detections", len(detections))
+            col1, col2 = st.columns(2)
+            col1.image(img, caption="Original")
+            col2.image(out, caption="Detected")
 
-    avg_conf = (
-        np.mean([c for _, c in detections])
-        if detections else 0
-    )
+            col1, col2, col3 = st.columns(3)
+            col1.metric("Objects", len(det))
+            col2.metric("Avg Confidence", f"{np.mean([c for _,c in det]):.2f}" if det else "0")
+            col3.metric("Status", "Healthy" if len(det)==0 else "Issue Found")
 
-    m2.metric(
-        "Average Confidence",
-        f"{avg_conf:.2f}"
-    )
+            if det:
+                st.subheader("🌱 Suggestions & Cure")
+                for d, c in det:
+                    suggestion, cure = get_suggestion_and_cure(d)
+                    st.write(f"**{d}** → Suggestion: {suggestion}")
+                    st.write(f"Cure: {cure}")
+                    st.write("---")
 
-    status = (
-        "Healthy"
-        if len(detections) == 0
-        else "Disease Found"
-    )
+                pdf = generate_pdf(img, out, det, file.name)
+                st.download_button("📄 Download Full Report", pdf, "report.pdf")
 
-    m3.metric("Plant Status", status)
+    elif mode == "Live":
+        st.info("Live detection started")
+        webrtc_streamer(key="live")
 
-    # Results
-    if detections:
+    st.markdown('</div>', unsafe_allow_html=True)
 
-        st.subheader("🌱 Detection Results")
+    st.markdown("<hr><p style='text-align:center;color:gray;'>Developed by Utkarsh Tripathi • Aditya Kumar Raj • Abhiyanshu Kumar</p>", unsafe_allow_html=True)
 
-        for label, conf in detections:
-
-            st.success(
-                f"{label} detected with confidence {conf:.2f}"
-            )
-
-    else:
-
-        st.success("✅ No Disease Detected")
-
-st.markdown("</div>", unsafe_allow_html=True)
-
-# ---------------------------------------------------
-# FOOTER
-# ---------------------------------------------------
-
-st.markdown(
-    """
-    <div class="footer">
-        Developed by Aditya Kumar Raj 🌱
-    </div>
-    """,
-    unsafe_allow_html=True
-)
+if __name__ == "__main__":
+    main()
